@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — BTA Fresh</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#FBF6E9; --paper-dim:#F2EAD2; --ink:#2B1B0E; --leaf:#2D4A1F; --white:#FFFDF7; --red-banana:#A8432F; --shadow:rgba(43,27,14,0.14); }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{ background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; padding:40px 20px; }
+  h1{ font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:26px; }
+  .wrap{ max-width:900px; margin:0 auto; }
+  .card{ background:var(--white); border-radius:22px; padding:30px; box-shadow:0 20px 44px var(--shadow); margin-bottom:24px; }
+  .login-card{ max-width:400px; margin:60px auto; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:12.5px; font-weight:700; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.03em; opacity:0.7; }
+  .field input{ width:100%; padding:12px 14px; border-radius:10px; border:1.5px solid rgba(43,27,14,0.18); background:var(--paper); font-size:14.5px; color:var(--ink); }
+  .btn{ background:var(--ink); color:var(--paper); border:none; border-radius:999px; padding:13px 22px; font-weight:700; font-size:14.5px; cursor:pointer; }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .error{ background:rgba(168,67,47,0.1); border:1px solid rgba(168,67,47,0.3); color:var(--red-banana); border-radius:10px; padding:10px 13px; font-size:13px; margin-bottom:14px; display:none; }
+  .error.show{ display:block; }
+  .topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .logout{ background:none; border:1.5px solid rgba(43,27,14,0.25); border-radius:999px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+  .section-title{ font-size:14px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7; margin-bottom:14px; }
+  .price-row{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:9px 0; border-bottom:1px solid rgba(43,27,14,0.07); }
+  .price-row label{ font-size:14px; font-weight:600; }
+  .price-input-wrap{ display:flex; align-items:center; gap:6px; background:var(--paper); border:1.5px solid rgba(43,27,14,0.18); border-radius:10px; padding:6px 10px; width:110px; }
+  .price-input-wrap input{ border:none; width:100%; font-family:'JetBrains Mono'; font-size:14px; background:transparent; padding:0; }
+  .price-input-wrap input:focus{ outline:none; }
+  .save-msg{ font-size:12.5px; margin-left:12px; opacity:0.7; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{ position:sticky; top:0; background:var(--paper-dim); text-align:left; padding:10px 12px; font-size:11.5px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.65; }
+  td{ padding:11px 12px; border-top:1px solid rgba(43,27,14,0.08); vertical-align:top; }
+  .table-wrap{ max-height:56vh; overflow-y:auto; border:1px solid rgba(43,27,14,0.1); border-radius:12px; }
+  .status-pill{ font-family:'JetBrains Mono'; font-size:11px; padding:3px 8px; border-radius:999px; text-transform:uppercase; }
+  .status-paid{ background:rgba(45,74,31,0.12); color:var(--leaf); }
+  .status-expired, .status-pending{ background:rgba(168,67,47,0.1); color:var(--red-banana); }
+  .no-orders{ text-align:center; padding:50px 20px; opacity:0.55; font-size:14px; }
+  .refresh{ background:none; border:none; text-decoration:underline; cursor:pointer; font-size:13px; color:var(--leaf); margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <p style="text-align:center; opacity:0.6;">Loading…</p>
+</div>
+
+<script>
+const app = document.getElementById('app');
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+async function checkSession(){
+  const res = await fetch('/api/admin/session');
+  const data = await res.json();
+  if(data.loggedIn) renderDashboard(); else renderLogin();
+}
+
+function renderLogin(msg){
+  app.innerHTML = `
+    <div class="card login-card">
+      <h1 style="margin-bottom:6px;">Admin login</h1>
+      <p style="opacity:0.65; font-size:13.5px; margin-bottom:20px;">Sign in to view orders and manage prices.</p>
+      <div class="error ${msg ? 'show' : ''}">${msg || ''}</div>
+      <form id="loginForm">
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" required autofocus>
+        </div>
+        <button class="btn" type="submit" style="width:100%;">Log in</button>
+      </form>
+    </div>
+  `;
+  document.getElementById('loginForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const password = document.getElementById('password').value;
+    const res = await fetch('/api/admin/login', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if(res.ok) renderDashboard(); else renderLogin(data.error || 'Login failed.');
+  });
+}
+
+async function renderDashboard(){
+  app.innerHTML = `<p style="text-align:center; opacity:0.6;">Loading dashboard…</p>`;
+
+  const [pricesRes, ordersRes] = await Promise.all([
+    fetch('/api/admin/prices'), fetch('/api/admin/orders')
+  ]);
+  if(pricesRes.status === 401 || ordersRes.status === 401){ renderLogin(); return; }
+  const { products } = await pricesRes.json();
+  const { orders } = await ordersRes.json();
+
+  app.innerHTML = `
+    <div class="topbar">
+      <h1>Admin dashboard</h1>
+      <button class="logout" id="logoutBtn">Log out</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Prices</div>
+      <form id="priceForm">
+        ${products.map(p=>`
+          <div class="price-row">
+            <label for="price-${p.id}">${p.name}</label>
+            <div class="price-input-wrap">
+              <span class="mono" style="opacity:0.6;">$</span>
+              <input id="price-${p.id}" type="number" step="0.01" min="0" value="${p.price.toFixed(2)}">
+            </div>
+          </div>
+        `).join('')}
+        <button class="btn" type="submit" style="margin-top:14px;">Save prices</button>
+        <span class="save-msg" id="saveMsg"></span>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Orders</div>
+      <button class="refresh" id="refreshBtn">↻ Refresh</button>
+      <div id="ordersWrap"></div>
+    </div>
+  `;
+
+  document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+    await fetch('/api/admin/logout', { method:'POST' });
+    renderLogin();
+  });
+  document.getElementById('refreshBtn').addEventListener('click', renderDashboard);
+
+  document.getElementById('priceForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const msg = document.getElementById('saveMsg');
+    const prices = {};
+    products.forEach(p=>{
+      const val = parseFloat(document.getElementById(`price-${p.id}`).value);
+      if(!isNaN(val)) prices[p.id] = val;
+    });
+    msg.textContent = 'Saving…';
+    const res = await fetch('/api/admin/prices', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ prices })
+    });
+    msg.textContent = res.ok ? 'Saved ✓' : 'Failed to save.';
+    setTimeout(()=>{ msg.textContent=''; }, 2000);
+  });
+
+  const wrap = document.getElementById('ordersWrap');
+  if(orders.length === 0){
+    wrap.innerHTML = `<div class="no-orders">No orders yet.</div>`;
+    return;
+  }
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Order</th><th>Placed</th><th>Status</th><th>Customer</th><th>Delivery address</th><th>Items</th><th>Cartons</th><th>Value</th>
+        </tr></thead>
+        <tbody>
+          ${orders.map(o=>`
+            <tr>
+              <td class="mono">${o.orderRef||''}</td>
+              <td>${o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'}</td>
+              <td><span class="status-pill status-${o.status}">${o.status}</span></td>
+              <td>${escapeHtml(o.customerName)}<br><span style="opacity:0.6;">${escapeHtml(o.customerEmail)}</span></td>
+              <td>${escapeHtml([o.address?.line1, o.address?.line2, o.address?.city, o.address?.state, o.address?.postal_code, o.address?.country].filter(Boolean).join(', '))}</td>
+              <td>${(o.items||[]).map(it=>`${escapeHtml(it.name)} × ${it.qty}`).join('<br>')}</td>
+              <td class="mono">${o.totalCartons ?? ''}</td>
+              <td class="mono">${typeof o.totalValue === 'number' ? '$'+o.totalValue.toFixed(2) : '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+checkSession();
+</script>
+</body>
+</html>
